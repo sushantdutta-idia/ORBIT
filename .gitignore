@@ -1,0 +1,40 @@
+# Data, never code: visibilities, images, archives and their products.
+*.ms/
+*.MS/
+*.uvfits
+*.UVFITS
+*.uvfits/
+*.lta
+*.tar
+*.tar.gz
+*.fits
+*.FITS
+*.image/
+*.image.tt0/
+*.cal/
+*Products*/
+*_targets*/
+targets_run*/
+1778529082_*/
+
+# A separate project with its own history (LOFAR's LINC workflow).
+LINC/
+
+# Run logs and machine state.
+*.log
+*.slurm.log
+*.out
+*.err
+*.lock
+casa-*.log
+ipython-*.log
+
+# A checksum list of an earlier upload bundle; git tracks content itself.
+SHA256SUMS
+
+# Python and editor clutter.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store

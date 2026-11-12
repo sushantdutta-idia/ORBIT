@@ -1,0 +1,407 @@
+
+# Shared run configuration for pipeline.py and the run_ugmrt.py,
+# run_meerkat.py, and run_lofar.py telescope-specific launchers.
+ms: null
+outdir: Products
+
+# A regular CASA Measurement Set directory is used directly. A UVFITS or
+# FITS-IDI visibility file is imported to <outdir>/ingest/<stem>.ms first.
+# Ordinary image FITS does not contain visibilities and is rejected.
+# A GMRT LTA file (name ending .lta, .ltb or .lta_1 ...; or fits_format: lta)
+# is first converted to UVFITS with NCRA's listscan and gvfits in
+# <outdir>/ingest/lta/, then imported like uGMRT FITS.
+fits_format: auto
+imported_ms: null
+# Optional list of online GMRT flag files used only with uGMRT UVFITS or LTA.
+gmrt_flagfiles: []
+# For LTA input only: the two converters (a path, a name on PATH, or a whole
+# command such as "singularity exec /path/image.sif /path/listscan"; use
+# absolute paths). Linux builds: https://github.com/ruta-k/CAPTURE-CASA6
+gmrt_listscan: listscan
+gmrt_gvfits: gvfits
+# Keep the converted FITS after the import (it is as large as the data).
+keep_lta_fits: false
+
+# Telescope-aware run settings. `auto` verifies OBSERVATION and antenna
+# metadata before resolving a band. Set receiver_band when metadata/frequency
+# coverage is ambiguous (notably MeerKAT UHF/L overlap).
+telescope: auto
+receiver_band: null
+data_state: raw
+# auto: uGMRT is imaged with CASA tclean (always); MeerKAT and LOFAR with
+# WSClean. MeerKAT may instead use `imager: casa`; LOFAR requires WSClean.
+# WSClean must be on PATH in the job (module load / --wsclean), and for
+# MeerKAT the Python given by --python needs katbeam and astropy.
+imager: auto
+wsclean: wsclean
+# LOFAR images the calibrated MS it is given, so this column is used as
+# written. MeerKAT is imaged from this pipeline's own MS and chooses the
+# column the way the CASA backend does (DATA for the self-calibrated MS);
+# set a value other than CORRECTED_DATA to force a column for either.
+wsclean_data_column: CORRECTED_DATA
+# MeerKAT only. How the MFS image is divided by the primary beam:
+# band_average (default; exact for a flat-spectrum source across the band)
+# or reference_frequency (the beam at one frequency, as the CASA backend
+# does, which leaves a frequency-dependent error off-axis).
+# meerkat_mfs_beam_mode: band_average
+# WSClean output channels joined in one deconvolution for MeerKAT (UHF 6,
+# L 8 by default); 0 or 1 images the band as one channel.
+# meerkat_wsclean_channels_out: 8
+# When a job has a memory limit, WSClean is capped at this fraction of it
+# (WSClean sizes itself from the node's memory, not the job's). 0 disables.
+# wsclean_memory_fraction: 0.8
+# Required explicitly for LOFAR imaging: full, differential, or none.
+lofar_beam_mode: null
+
+# Expert-only CubiCal DD templates. Leave null for the validated default
+# uGMRT killMS/DDFacet path; templates are forwarded verbatim to ddcal.py.
+solver_command_template: null
+apply_command_template: null
+
+# Optional explicit field/model selections. They are strongly recommended
+# when observing intents are absent or unreliable.
+# Comma-separated lists are accepted for flux_calibrator and
+# phase_calibrator. When multiple phase calibrators are selected,
+# target_phase_map should use TARGET:PHASE pairs.
+# Leave target and targets null to image every calibrated science target,
+# each in Products/targets/<name>. Set target to image one, or targets to a
+# comma-separated subset. target_selection may be all (default), auto (rank
+# post-flagging statistics and image one), or explicit.
+target: null
+targets: null
+target_selection: all
+target_fields: null
+flux_calibrator: null
+bandpass_calibrator: null
+secondary_flux_calibrator: null
+phase_calibrator: null
+target_phase_map: null
+reference_antenna: null
+flux_standard: null
+flux_model: null
+# `casa-image` or `component-list`; the model must carry an absolute,
+# versioned broadband Stokes-I flux scale.
+flux_model_type: casa-image
+
+# Where CASA comes from. On ilifu it is an environment module: name it here
+# ('module avail casa' lists them) and the pipeline loads it itself, both on
+# the Jupyter node and in a SLURM job. Leave null when `casa` is on PATH.
+# casa_module: casa/6.7.0
+# A module like ilifu's casa/6.7.0 runs CASA from a container and defines no
+# `casa` program; the pipeline then runs the stages with that container's
+# Python by itself. To name the Python yourself instead (any modular CASA):
+# casa_python: singularity exec /path/to/casa-modular.sif python3
+
+# Two ways to start a run:
+#   python3 pipeline.py --background   this machine (e.g. the Jupyter node),
+#                                      detached, log <outdir>/pipeline_run.log
+#   python3 pipeline.py --submit       a SLURM job built from the settings below
+# Plain `python3 pipeline.py` runs in the foreground of the terminal.
+
+# Slurm settings used by: python3 pipeline.py --write-sbatch JOB.sbatch
+# Change these to match the allocation and partition at your site.
+slurm_job_name: radio_continuum
+slurm_partition: HighMem
+slurm_mem: 232GB
+slurm_time: "200:00:00"
+slurm_nodes: 1
+slurm_ntasks: 16
+slurm_cpus_per_task: 4
+slurm_log_dir: "."
+slurm_output: "radio_continuum-%j.out"
+slurm_error: "radio_continuum-%j.err"
+slurm_mail_user: ""
+slurm_mail_type: "BEGIN,END,FAIL,TIME_LIMIT"
+slurm_script_path: run_radio_continuum_pipeline.sbatch
+# slurm_account: ""
+# slurm_qos: ""
+# Set only if CASA is not already available to batch jobs, for example:
+# slurm_module_commands: ["module load casa/6.7.3.21"]
+ncpu: 64
+ram_gb: 512
+# Execution-only acceleration. On ilifu, auto uses the matching mpicasa for
+# final imaging; on macOS or without mpicasa it falls back to
+# serial CASA with all allocated CPU threads. Science-task values are unchanged.
+mpi: auto
+mpi_processes: 16
+# Local workstation profile (do not enable in an ilifu Slurm job):
+# profile: laptop
+# threads: 6
+restart: true
+# Reuse validated completed stages and restart the failed stage from its
+# internal checkpoints when the same pipeline command is submitted again.
+resume: true
+
+# Rigorous but bounded pre-calibration RFI excision. One conservative TFCrop
+# pass detects on parallel hands without internal flag growth; RFlag is deferred
+# until a provisional bandpass exists and then runs on CORRECTED_DATA. One
+# explicit 80% extension follows the raw TFCrop pass. Any pass adding >20% of
+# the entire MS, or taking the total above 70%, is restored for review.
+flagging_max_iterations: 1
+# flagdata memory. CASA loads one time chunk per field/SPW; whole scans are kept
+# wherever they fit and bounded otherwise, recorded in
+# flagging/flagdata_chunk_plan.json (and calibration/postcal_flagdata_chunk_plan.json).
+# null detects the limit from Slurm, the cgroup and physical memory. Calibrate
+# bytes-per-element against `sacct --format=MaxRSS` if a run is still killed.
+# flagdata_memory_limit_gb: null
+# flagdata_memory_fraction: 0.5
+# flagdata_bytes_per_element: 12.0
+flagging_precal_rflag: false
+# Disabled by default: enable only after a documented scan-transition artifact
+# is visible in this observation's diagnostics.
+flagging_quack_interval_s: 0.0
+# Band-edge roll-off excision. These fractions apply independently to both
+# ends of every SPW; edit only after inspecting the SPW coverage plot.
+flagging_edge_fraction_b2: 0.07
+flagging_edge_fraction_b3: 0.05
+flagging_edge_fraction_b4: 0.05
+flagging_edge_fraction_b5: 0.03
+flagging_tfcrop_timecutoff: 4.5
+flagging_tfcrop_freqcutoff: 4.0
+flagging_rflag_timedevscale: 6.0
+flagging_rflag_freqdevscale: 6.0
+# Each non-converged pass lowers the sigma scales by this amount, down to the
+# floors defined in config.py.
+flagging_tighten_per_iteration: 0.50
+flagging_extend_growtime: 80.0
+flagging_extend_growfreq: 80.0
+flagging_max_iteration_new_fraction: 0.20
+flagging_max_total_fraction: 0.70
+# Protect any individual field or SPW from catastrophic automatic data loss.
+flagging_max_group_iteration_new_fraction: 0.35
+flagging_max_group_total_fraction: 0.85
+flagging_max_extension_new_fraction: 0.10
+flagging_max_group_extension_new_fraction: 0.20
+flagging_ml_enabled: false
+# A telescope-profile reference antenna is preferred over the strictly
+# least-flagged one when its flagged fraction is within this margin. Array
+# geometry matters as much as cleanliness for a phase reference.
+# flagging_refant_preference_tolerance: 0.05
+
+# Telescope-scoped MeerKAT L-band masks. They are not applied to uGMRT/LOFAR
+# data even when frequency ranges overlap. uGMRT and MeerKAT runs perform a
+# guarded corrected-data TFCrop/RFlag pass on the absolute parallel hands,
+# then discard the provisional tables and solve a complete fresh set.
+ugmrt_postcal_tfcrop_timecutoff: 5.0
+ugmrt_postcal_tfcrop_freqcutoff: 4.5
+ugmrt_postcal_rflag_timedevscale: 6.0
+ugmrt_postcal_rflag_freqdevscale: 6.0
+ugmrt_postcal_rflag_winsize: 5
+ugmrt_postcal_max_new_fraction: 0.10
+ugmrt_postcal_max_total_fraction: 0.70
+ugmrt_postcal_max_group_new_fraction: 0.15
+ugmrt_postcal_max_group_total_fraction: 0.85
+
+meerkat_l_known_frequency_masks: ["933~960MHz", "1163~1299MHz", "1524~1630MHz"]
+meerkat_postcal_tfcrop_timecutoff: 4.0
+meerkat_postcal_tfcrop_freqcutoff: 4.0
+meerkat_postcal_rflag_timedevscale: 5.0
+meerkat_postcal_rflag_freqdevscale: 5.0
+meerkat_postcal_rflag_winsize: 5
+meerkat_postcal_max_new_fraction: 0.20
+meerkat_postcal_max_total_fraction: 0.75
+meerkat_postcal_max_group_new_fraction: 0.30
+meerkat_postcal_max_group_total_fraction: 0.90
+
+# These four keys are FLAT: each one replaces the value in EVERY band of both
+# FINAL_IMAGING_CONFIG and SELFCAL_IMAGING_CONFIG, discarding the
+# telescope-specific tuning in config.py. Shipping `robust: 0.5` uncommented
+# silently replaced MeerKAT's -0.5 and LOFAR's -0.25 across all bands, which
+# for MeerKAT's dense core means a much larger synthesized beam than intended.
+# They are commented out so the per-band defaults apply. Uncomment one only to
+# force it everywhere; any band whose default it displaces is then reported in
+# the imaging report under `flat_imaging_overrides`.
+# robust: 0.5
+# niter: 300000
+# nterms: 2
+# nsigma: 3.0
+# Restrict published PB-corrected products to the region where the correction
+# amplifies noise by no more than about 3.3.
+pbmin: 0.3
+# The standalone CASA widebandpbcor task has a documented cross-directory
+# failure mode. Keep it disabled for unattended runs; the pipeline performs
+# an atomic TT0/PB correction with impbcor instead.
+wideband_pbcor_enabled: false
+# In-band sub-band imaging is off unless enabled here or with --make-subbands.
+# It is supported for uGMRT; MeerKAT sub-band PB correction is not implemented.
+# Set `subbands` in config.py (or pass --subbands N) to change the count.
+make_subbands: false
+wideband_pb_sample_edge_guard: 0.10
+
+# Preserve the calibrated flux scale while propagating amplitude corrections
+# into visibility weights for the best attainable imaging sensitivity.
+calibration_calwt: true
+# A receptor-dependent G solve establishes X/Y or R/L coherence before any
+# later polarization-independent T gain solve. Unsafe T overrides are rejected.
+# The resulting prebp table is used only while solving the bandpass; it is
+# never interpolated onto another field or onto a science target.
+calibration_prebp_gaintype: G
+# flex re-references a solution interval to another antenna when the
+# reference antenna is flagged in it. strict flags every antenna's solution
+# in that interval instead, and linear interpolation then flags the science
+# scans on either side: in one uGMRT Band 4 run that removed a target's whole
+# first scan. For total-intensity work a change of reference cancels on every
+# baseline, so flex loses nothing. Use strict only where one physical
+# reference antenna is required throughout (cross-hand polarization).
+calibration_refantmode: flex
+# Spectral order used by fluxscale for the bootstrapped transfer calibrator.
+# Clamped at run time to (number of spectral windows - 1).
+calibration_fluxscale_fitorder: 1
+# Solution interval of the phase table transferred to science targets. `inf`
+# gives one averaged solution per calibrator scan; the shorter band-dependent
+# phase_solint is retained for the calibrators' own correction.
+calibration_target_phase_transfer_solint: inf
+# Abort a solve/resume when more than this fraction of the calibration-table
+# solution elements are flagged. Lower this after reviewing per-table QA.
+calibration_max_flagged_solution_fraction: 0.50
+# Apply a separate fail-closed limit to every antenna, SPW, field, and
+# observation represented by a calibration table.
+calibration_max_group_flagged_solution_fraction: 0.80
+# If exactly one participating antenna has no usable K solution while all
+# non-antenna QA groups remain healthy, record it, exclude it from all later
+# calibration solves, and recompute delay.cal once. Multiple/wider failures
+# still abort. Set the first option false to require manual intervention.
+calibration_auto_quarantine_failed_delay_antennas: true
+calibration_max_auto_quarantine_delay_antennas: 1
+calibration_max_auto_quarantine_delay_fraction: 0.10
+calibration_min_antennas_after_delay_quarantine: 8
+
+# Self-calibration tables are gated independently because gaincal may emit
+# structurally valid tables with sparse or invalid target solutions.  Invalid,
+# zero, and flagged solutions all count as unusable for these limits.
+selfcal_max_unusable_solution_fraction: 0.50
+selfcal_max_group_unusable_solution_fraction: 0.80
+# Image dynamic range required before each self-calibration mode is attempted.
+# These are NOT the gaincal minsnr values (min_snr_phase / min_snr_amp in
+# config.py); amplitude self-calibration absorbs sky-model error into the
+# gains, so it needs a well-modelled field rather than a mere detection.
+selfcal_phase_start_dynamic_range: 20.0
+# Phase self-calibration also starts below that dynamic range when each
+# antenna's phase solution at the longest solint is expected to reach this
+# S/N, measured from the CLEAN model and the visibility noise. Gain errors are
+# what hold a field's dynamic range down, so dynamic range alone can keep
+# self-calibration from the fields that need it. 0 disables this route.
+selfcal_phase_start_min_solution_snr: 10.0
+selfcal_amp_start_dynamic_range: 100.0
+# Keeps outer-field sources in the self-calibration model instead of letting
+# CASA's internal beam model blank them out of it. CASA neither images nor
+# cleans below pblimit of its own beam model, which for uGMRT is narrower
+# than the measured beam; a negative value switches that off so the whole
+# image is deconvolved.
+selfcal_pblimit: -0.01
+# A phase loop's solutions are applied with calonly: data whose increment
+# could not be solved keep the calibration they already have. calflagstrict
+# would flag them instead.
+# selfcal_applymode: calonly
+# An antenna holding less than this fraction of the median antenna's
+# unflagged data is not expected to be solvable and is left out of the
+# solution-coverage test below.
+# selfcal_min_antenna_data_fraction: 0.20
+# Of the antennas (and solution intervals) that do have data, at most this
+# fraction may fail to solve before the whole table is rejected.
+# selfcal_max_failed_antenna_fraction: 0.25
+# selfcal_max_failed_time_fraction: 0.25
+# Size of the self-calibration images only; the published image keeps its own
+# band defaults. CASA's largest allocation is the padded w-projection grid,
+# which grows as the square of imsize, so halving imsize quarters it. Use
+# these when self-calibration runs out of memory in the job you have: the
+# model only has to be good enough to solve against. A smaller field leaves
+# outer sources out of the model, so keep the field of interest inside it.
+# Displaced band defaults are listed in the self-calibration report.
+# selfcal_imsize: 4096
+# selfcal_cell: 1.0arcsec
+# selfcal_wprojplanes: 64
+# selfcal_niter: 50000
+# selfcal_robust: 0.5
+
+# auto-multithresh measures its mask threshold on the residual, which on the
+# first pass is the dirty map. Where several comparable sources make that
+# map's rms sidelobe confusion rather than noise, the threshold sits at or
+# above the peak, no mask opens, and the published image is undeconvolved.
+# A bounded first clean of what is plainly there prevents that; nsigma is
+# re-measured each major cycle, so it reaches the brightest peaks first and
+# follows the noise down as their sidelobes come out.
+clean_bootstrap_enabled: true
+# Shallow on purpose: auto-multithresh does the deep clean, inside masks, and
+# needs sources still above its noise threshold to draw them around.
+clean_bootstrap_nsigma: 8.0
+clean_bootstrap_niter: 20000
+# auto-multithresh's sidelobe criterion is capped at this fraction of the
+# residual peak, per image, from the PSF's measured largest sidelobe. Without
+# it a short observation's PSF (sidelobes of 0.4 or more) can never open a
+# mask.
+automask_max_sidelobe_fraction: 0.6
+# If no mask opens even so, what remains above this many sigma is cleaned
+# without one.
+clean_floor_nsigma: 5.0
+# Leave unset to let the bootstrap reach as far as the deconvolution does
+# (pblimit); bright sources in the outer primary beam do the most damage.
+# clean_bootstrap_pbmask: 0.2
+# CLEAN that stops at its iteration limit with a residual peak above this
+# many sigma is continued, at most clean_max_continuations more runs of niter.
+clean_continue_min_peak_snr: 5.0
+clean_max_continuations: 3
+# Warn when the restoring beam's minor axis spans fewer pixels than this.
+min_pixels_per_beam: 3.0
+# An image with no CLEAN model is the sky convolved with the point-spread
+# function. Publishing one as a final image is refused when the residual
+# holds a peak above this many sigma, because the emission is real and
+# something failed to reach it. Raise it only to publish such an image
+# deliberately.
+undeconvolved_max_peak_snr: 5.0
+
+# Stable CASA deconvolution. The first pass rejects PSF sidelobes/noise; one
+# relaxed retry is allowed only for an empty model with a >=8-sigma residual.
+automask_sidelobethreshold: 2.5
+automask_noisethreshold: 4.25
+automask_lownoisethreshold: 1.5
+automask_minbeamfrac: 0.20
+automask_growiterations: 75
+automask_fastnoise: false
+automask_retry_enabled: true
+automask_retry_min_peak_snr: 8.0
+automask_retry_sidelobethreshold: 1.5
+automask_retry_noisethreshold: 3.5
+automask_retry_minbeamfrac: 0.05
+automask_retry_growiterations: 150
+clean_cyclefactor: 1.5
+
+# Optional PyBDSF source detection after final imaging. It runs with the
+# non-CASA Python selected by the `python` setting. When PyBDSF is absent and
+# strict mode is false, the stage records a safe skip rather than failing.
+source_detection_enabled: true
+source_detection_strict: false
+source_detection_image_preference: pbcor
+pybdsf_thresh_isl: 4.0
+pybdsf_thresh_pix: 5.0
+pybdsf_adaptive_rms_box: true
+pybdsf_atrous_do: true
+# pybdsf_rms_box: [120, 30]
+
+# Optional uGMRT-only direction-dependent calibration. Leave preparation enabled for a
+# first QA run, then use `--execute-ddcal` after loading a compatible
+# killMS/DDFacet environment. `auto` uses a compact direction set for a
+# single-object field and a larger multi-facet set for a survey field.
+include_ddcal: false
+dd_mode: auto
+dd_engine: auto
+dd_prepare_only: true
+skip_dd_post_imaging: false
+dd_data_column: auto
+dd_single_max_directions: 3
+dd_survey_min_directions: 4
+# Optional global overrides of the band-dependent defaults:
+# dd_min_flux_jy: 0.10
+# dd_max_directions: 10
+# dd_merge_radius_arcmin: 4.0
+# dd_facet_radius_arcmin: 15.0
+# dd_solint_time: 5min
+# dd_solint_freq: 16MHz
+dd_killms_pol_mode: Scalar
+dd_killms_weighting: Natural
+dd_killms_max_nchan_solutions: 16
+ddfacet_major_cycles: 5
+ddfacet_rms_factor: 3.0
+ddfacet_mask_sigma: 5.0
+ddfacet_global_norm: MeanAbs
+dd_validate_solver_cli: true
